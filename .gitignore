@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-data/
+# 取得データ・DB・検証結果（直下の data/ だけ。boatrace/data/ はプログラムなので含める）
+/data/
 .env
