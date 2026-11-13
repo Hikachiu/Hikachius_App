@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} | 競艇予測{% endblock %}
+{% block content %}
+<h1>{{ name }} <small>{{ prof.racer_id }}</small></h1>
+
+<section class="card">
+  <p>通算 {{ prof.overall.starts }} 走 / 1着率 {{ prof.overall.win_rate | pct }} / 3連対率 {{ prof.overall.top3_rate | pct }}</p>
+</section>
+
+<div class="grid">
+{% for dim, spec in dims.items() %}
+{% set label = spec[0] %}
+<section class="card">
+  <h2>{{ label }}別</h2>
+  {% set buckets = prof.dims[dim] %}
+  {% if buckets %}
+  <table>
+    <tr><th>条件</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+    {% for b, t in buckets | dictsort %}
+    <tr class="{% if t.starts >= 5 and t.top3_rate > prof.overall.top3_rate + 0.05 %}good{% elif t.starts >= 5 and t.top3_rate < prof.overall.top3_rate - 0.05 %}bad{% endif %}">
+      <td>{{ b }}</td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">データなし{% if dim == "temp" %}（気温は ingest temps で取得）{% endif %}</p>{% endif %}
+</section>
+{% endfor %}
+
+<section class="card">
+  <h2>枠別</h2>
+  <table>
+    <tr><th>枠</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+    {% for lane, t in prof.by_lane | dictsort %}
+    <tr><td><span class="lane lane{{ lane }}">{{ lane }}</span></td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section class="card">
+  <h2>場別</h2>
+  <table>
+    <tr><th>場</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+    {% for v, t in prof.by_venue | dictsort %}
+    <tr><td>{{ VENUES.get(v, v) }}</td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+</div>
+{% endblock %}
