@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS programs (
     venue     TEXT NOT NULL,
     race_no   INTEGER NOT NULL,
     race_name TEXT,
-    distance  INTEGER
+    distance  INTEGER,
+    deadline  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS program_entries (
@@ -72,12 +73,31 @@ CREATE TABLE IF NOT EXISTS program_entries (
     boat_2rate     REAL,
     PRIMARY KEY (race_id, lane)
 );
+
+CREATE TABLE IF NOT EXISTS sync_log (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    started  TEXT,
+    finished TEXT,
+    ok       INTEGER,
+    message  TEXT
+);
 """
 
 
 def connect() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    # 自動取り込みと画面が同時に DB を使うので、ロック待ちを長めにする
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    for table, col, typ in MIGRATIONS:
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if col not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
     return conn
+
+
+# あとから足した列（既存の DB にも追加する）
+MIGRATIONS = [
+    ("programs", "deadline", "TEXT"),   # 締切予定時刻 HH:MM
+]

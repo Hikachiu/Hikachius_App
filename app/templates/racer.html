@@ -1,49 +1,73 @@
 {% extends "base.html" %}
 {% block title %}{{ name }} | 競艇予測{% endblock %}
 {% block content %}
-<h1>{{ name }} <small>{{ prof.racer_id }}</small></h1>
-
-<section class="card">
-  <p>通算 {{ prof.overall.starts }} 走 / 1着率 {{ prof.overall.win_rate | pct }} / 3連対率 {{ prof.overall.top3_rate | pct }}</p>
+<section class="hero">
+  <p><a href="/racers">← 選手をしらべる</a></p>
+  <h1>{{ name }} <small class="muted">{{ prof.racer_id }}</small></h1>
+  {% if latest %}
+  <p class="lead">
+    <span class="grade g{{ latest.grade }}">{{ latest.grade }}<small>{{ GRADE_LABEL.get(latest.grade, '') }}</small></span>
+    {{ latest.branch }}・{{ latest.age }}歳・勝率 {{ latest.nat_win_rate }}
+  </p>
+  {% endif %}
 </section>
+
+<section class="stat-row">
+  <div class="stat"><span class="muted">走ったレース</span><b>{{ prof.overall.starts }}</b></div>
+  <div class="stat"><span class="muted">1着になった割合</span><b>{{ prof.overall.win_rate | pct0 }}</b></div>
+  <div class="stat"><span class="muted">3着以内の割合</span><b>{{ prof.overall.top3_rate | pct0 }}</b></div>
+</section>
+
+<p class="muted">緑は「いつもより成績がいい＝得意」、赤は「いつもより悪い＝苦手」。5走以上ある条件だけ色をつけているよ。</p>
 
 <div class="grid">
 {% for dim, spec in dims.items() %}
 {% set label = spec[0] %}
 <section class="card">
-  <h2>{{ label }}別</h2>
+  <h2>{{ label }}ごとの成績</h2>
   {% set buckets = prof.dims[dim] %}
   {% if buckets %}
-  <table>
-    <tr><th>条件</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+  <ul class="cond-list">
     {% for b, t in buckets | dictsort %}
-    <tr class="{% if t.starts >= 5 and t.top3_rate > prof.overall.top3_rate + 0.05 %}good{% elif t.starts >= 5 and t.top3_rate < prof.overall.top3_rate - 0.05 %}bad{% endif %}">
-      <td>{{ b }}</td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td>
-    </tr>
+    {% set cls = "good" if t.starts >= 5 and t.top3_rate > prof.overall.top3_rate + 0.05 else ("bad" if t.starts >= 5 and t.top3_rate < prof.overall.top3_rate - 0.05 else "") %}
+    <li class="{{ cls }}">
+      <span class="cond-name">{{ b }}</span>
+      <span class="bar"><span style="width: {{ (t.top3_rate * 100) | round(1) }}%"></span></span>
+      <span>3着以内 <b>{{ t.top3_rate | pct0 }}</b></span>
+      <span class="muted small">{{ t.starts }}走</span>
+    </li>
     {% endfor %}
-  </table>
-  {% else %}<p class="muted">データなし{% if dim == "temp" %}（気温は ingest temps で取得）{% endif %}</p>{% endif %}
+  </ul>
+  {% else %}<p class="muted">まだデータがないよ{% if dim == "temp" %}（気温は別に読み込みが必要）{% endif %}</p>{% endif %}
 </section>
 {% endfor %}
 
 <section class="card">
-  <h2>枠別</h2>
-  <table>
-    <tr><th>枠</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+  <h2>枠（スタート位置）ごとの成績</h2>
+  <ul class="cond-list">
     {% for lane, t in prof.by_lane | dictsort %}
-    <tr><td><span class="lane lane{{ lane }}">{{ lane }}</span></td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td></tr>
+    <li>
+      <span class="cond-name"><span class="lane lane{{ lane }}">{{ lane }}</span> {{ lane }}号艇</span>
+      <span class="bar"><span style="width: {{ (t.top3_rate * 100) | round(1) }}%"></span></span>
+      <span>3着以内 <b>{{ t.top3_rate | pct0 }}</b></span>
+      <span class="muted small">{{ t.starts }}走</span>
+    </li>
     {% endfor %}
-  </table>
+  </ul>
 </section>
 
 <section class="card">
-  <h2>場別</h2>
-  <table>
-    <tr><th>場</th><th>走数</th><th>1着率</th><th>3連対率</th></tr>
+  <h2>レース場ごとの成績</h2>
+  <ul class="cond-list">
     {% for v, t in prof.by_venue | dictsort %}
-    <tr><td>{{ VENUES.get(v, v) }}</td><td>{{ t.starts }}</td><td>{{ t.win_rate | pct }}</td><td>{{ t.top3_rate | pct }}</td></tr>
+    <li>
+      <span class="cond-name">{{ VENUES.get(v, v) }}</span>
+      <span class="bar"><span style="width: {{ (t.top3_rate * 100) | round(1) }}%"></span></span>
+      <span>3着以内 <b>{{ t.top3_rate | pct0 }}</b></span>
+      <span class="muted small">{{ t.starts }}走</span>
+    </li>
     {% endfor %}
-  </table>
+  </ul>
 </section>
 </div>
 {% endblock %}

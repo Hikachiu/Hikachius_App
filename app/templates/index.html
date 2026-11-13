@@ -1,34 +1,64 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
-  <form method="get" action="/" class="row">
-    <label>開催日 <input type="date" name="d" value="{{ d }}"></label>
-    <button>表示</button>
+<section class="hero">
+  <h1>{% if d == today %}今日のレース{% else %}{{ d }} のレース{% endif %}</h1>
+  <p class="lead">見たいレースをタップすると、AIの予想とおすすめの買い方が出るよ。</p>
+  <form method="get" action="/" class="date-form">
+    <input type="date" name="d" value="{{ d }}" aria-label="開催日">
+    <button class="btn">この日を見る</button>
+    {% if d != today %}<a class="btn ghost" href="/">今日に戻る</a>{% endif %}
   </form>
-  <p class="muted">
-    過去データ: {{ stats.n or 0 }} レース
-    {% if stats.n %}（{{ stats.mn }} 〜 {{ stats.mx }}、気温あり {{ stats.t or 0 }} レース）{% endif %}
-  </p>
 </section>
 
-{% if not by_venue %}
-<section class="card">
-  <p>{{ d }} の出走表はまだ取り込まれていません。</p>
-  <form method="post" action="/fetch-program">
-    <input type="hidden" name="d" value="{{ d }}">
-    <button>公式サイトから出走表を取得</button>
-  </form>
-</section>
+{% if ended %}
+<section class="card notice">🌙 今日のレースはもう全部締め切ったよ。明日の出走表は前日の夕方ごろから読み込めます。</section>
 {% endif %}
 
-{% for venue, races in by_venue.items() %}
+{% if not by_venue %}
+<section class="card empty">
+  <p class="big">📭 {{ d }} の出走表はまだ読み込まれていないよ</p>
+  <form method="post" action="/fetch-program">
+    <input type="hidden" name="d" value="{{ d }}">
+    <button class="btn primary">公式サイトから出走表を読み込む</button>
+  </form>
+  <p class="muted">開催がない日は読み込めません。</p>
+</section>
+{% else %}
+
+{% if soon %}
 <section class="card">
-  <h2>{{ VENUES.get(venue, venue) }}</h2>
-  <div class="races">
-    {% for r in races %}
-    <a class="race-chip" href="/race/{{ r.race_id }}">{{ r.race_no }}R<small>{{ r.race_name }}</small></a>
+  <h2>⏰ もうすぐ締切</h2>
+  <div class="soon-list">
+    {% for r in soon %}
+    <a class="soon" href="/race/{{ r.race_id }}">
+      <span class="time">{{ r.deadline }}</span>
+      <span class="where">{{ VENUES.get(r.venue) }} {{ r.race_no }}R</span>
+      <span class="muted small">{{ r.race_name }}</span>
+    </a>
     {% endfor %}
   </div>
 </section>
-{% endfor %}
+{% endif %}
+
+<section class="venue-grid">
+  {% for venue, races in by_venue.items() %}
+  <div class="card venue">
+    <h2>{{ VENUES.get(venue, venue) }}</h2>
+    <div class="races">
+      {% for r in races %}
+      <a class="race-chip" href="/race/{{ r.race_id }}">
+        <b>{{ r.race_no }}R</b>
+        <small>{{ r.deadline or r.race_name }}</small>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<p class="muted center small">
+  予想のもとになる過去データ: {{ "{:,}".format(stats.n or 0) }} レース
+  {% if stats.n %}（{{ stats.mn }} 〜 {{ stats.mx }}）{% endif %}
+</p>
 {% endblock %}

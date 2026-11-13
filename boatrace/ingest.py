@@ -61,27 +61,31 @@ def ingest_program_day(conn: sqlite3.Connection, d: date) -> int:
     return len(programs)
 
 
-def ingest_temps(conn: sqlite3.Connection, start: date, end: date, venue: str | None) -> int:
+def ingest_temps(conn: sqlite3.Connection, start: date, end: date, venue: str | None,
+                 limit: int | None = None) -> int:
     sql = "SELECT race_id, date, venue, race_no FROM races WHERE temperature IS NULL AND date BETWEEN ? AND ?"
     params: list = [start.isoformat(), end.isoformat()]
     if venue:
         sql += " AND venue = ?"
         params.append(venue)
-    rows = conn.execute(sql + " ORDER BY date, venue, race_no", params).fetchall()
+    sql += " ORDER BY date DESC, venue, race_no"
+    if limit:
+        sql += f" LIMIT {int(limit)}"
+    rows = conn.execute(sql, params).fetchall()
     done = 0
     for i, r in enumerate(rows, 1):
         try:
             w = weather.fetch("raceresult", date.fromisoformat(r["date"]), r["venue"], r["race_no"])
         except Exception as e:  # noqa: BLE001  1件失敗しても続ける
-            print(f"  {r['race_id']}: 取得失敗 {e}")
+            print(f"  {r['race_id']}: 取得失敗 {e}", flush=True)
             continue
         if "temperature" in w:
             conn.execute("UPDATE races SET temperature=?, water_temp=? WHERE race_id=?",
                          (w["temperature"], w.get("water_temp"), r["race_id"]))
+            conn.commit()   # 途中で止まっても取れた分は残す
             done += 1
         if i % 50 == 0:
-            conn.commit()
-            print(f"  {i}/{len(rows)} 件")
+            print(f"  気温 {i}/{len(rows)} 件", flush=True)
     conn.commit()
     return done
 

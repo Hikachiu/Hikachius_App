@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}はじめての方へ | 競艇予測{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>🔰 はじめての方へ</h1>
+  <p class="lead">競艇（ボートレース）は、6艇が水上の1周600mのコースを3周して順位を競うレース。</p>
+</section>
+
+<section class="card">
+  <h2>このアプリの使い方</h2>
+  <ol class="steps">
+    <li><b>🏠 今日のレース</b>で、見たいレースをタップ</li>
+    <li><b>⭐ おすすめ</b>タブに「迷ったらこれ」の買い方が出る。予算を入れると1点いくらかも計算するよ</li>
+    <li>締切の15分前くらいに<b>🌤 天気と水面</b>タブの「自動で入れる」を押すと、今の天気で予想し直す</li>
+    <li><b>📋 買い目をコピー</b>して、<b>🎫 テレボート</b>（公式のネット投票）で買う</li>
+  </ol>
+</section>
+
+<section class="card">
+  <h2>ボートの色と枠番</h2>
+  <p>
+    {% for n, c in [(1,"白"),(2,"黒"),(3,"赤"),(4,"青"),(5,"黄"),(6,"緑")] %}
+    <span class="lane-legend"><span class="lane lane{{ n }}">{{ n }}</span>{{ c }}</span>
+    {% endfor %}
+  </p>
+  <p>1号艇はいちばん内側からスタートできるので、<b>全体の半分以上のレースで1号艇が勝つ</b>。迷ったら1号艇から考えるのが基本。</p>
+</section>
+
+<section class="card">
+  <h2>舟券の種類</h2>
+  <table class="guide-table">
+    <tr><th>券種</th><th>当て方</th><th>難しさ</th></tr>
+    {% for k, label in BET_TYPES.items() %}
+    <tr><td><b>{{ label }}</b></td><td>{{ BET_GUIDE[k][0] }}</td>
+      <td class="stars">{{ "★" * BET_GUIDE[k][1] }}{{ "☆" * (3 - BET_GUIDE[k][1]) }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted">初心者は<b>2連複</b>か<b>拡連複</b>からがおすすめ。順番を当てなくていいので当たりやすい。</p>
+</section>
+
+<section class="card">
+  <h2>よく出てくる言葉</h2>
+  <dl class="glossary">
+    <dt>級（A1・A2・B1・B2）</dt><dd>選手のランク。A1がトップ級で、B2が新人や下位の選手。</dd>
+    <dt>勝率</dt><dd>選手の実力の目安。着順を点数にした平均で、6.0を超えたら強い選手。</dd>
+    <dt>エンジン（モーター）</dt><dd>ボートのエンジンは毎回くじ引き。2着以内に来た割合が40%を超えるエンジンは「当たり」。</dd>
+    <dt>展示航走</dt><dd>レース前のお試し走行。これを見てから買う人も多い。</dd>
+    <dt>締切</dt><dd>舟券を買えるのはこの時刻まで。</dd>
+    <dt>回収率</dt><dd>使ったお金に対して戻ってきたお金の割合。100%超えでプラス。</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>舟券の買い方</h2>
+  <p>ネットで買うなら公式の<b>テレボート</b>。銀行口座を登録して会員になると、スマホやPCから買える。</p>
+  <p><a class="btn" href="{{ TELEBOAT_URL }}" target="_blank" rel="noopener">🎫 テレボートを開く ↗</a></p>
+  <p class="muted small">このアプリから直接は買えないよ。買うのは自分でログインしてね。<br>舟券は20歳になってから。のめり込みすぎに注意。</p>
+</section>
+{% endblock %}

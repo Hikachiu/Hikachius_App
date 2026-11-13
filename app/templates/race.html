@@ -1,95 +1,257 @@
 {% extends "base.html" %}
 {% block title %}{{ VENUES.get(prog.venue) }} {{ prog.race_no }}R | 競艇予測{% endblock %}
+
+{% macro boats(combo, bet_type) -%}
+  {%- set sep = "→" if bet_type in ("exacta", "trifecta") else "・" -%}
+  <span class="boats">
+  {%- for b in combo.split("-") -%}
+    {%- if not loop.first %}<span class="sep">{{ sep }}</span>{% endif -%}
+    <span class="lane lane{{ b }}">{{ b }}</span>
+  {%- endfor -%}
+  </span>
+{%- endmacro %}
+
+{% macro buy_text(picks, bet_type, each) -%}
+{{ prog.date }} {{ VENUES.get(prog.venue) }} {{ prog.race_no }}R {{ BET_TYPES[bet_type] }}
+{% for p in picks %}{{ p.combo }} {{ each }}円
+{% endfor %}合計 {{ each * picks|length }}円
+{%- endmacro %}
+
 {% block content %}
-<h1>{{ prog.date }} {{ VENUES.get(prog.venue) }} {{ prog.race_no }}R <small>{{ prog.race_name }} {{ prog.distance }}m</small></h1>
-
-<section class="card">
-  <h2>レース条件</h2>
-  <form method="get" class="row wrap">
-    <label>天候
-      <select name="weather">
-        <option value="">指定なし</option>
-        {% for w in ["晴", "曇り", "雨", "雪", "霧"] %}
-        <option {% if cond.weather == w %}selected{% endif %}>{{ w }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>風速(m) <input type="number" name="wind" min="0" max="20" value="{{ cond.wind if cond.wind is not none else '' }}"></label>
-    <label>波高(cm) <input type="number" name="wave" min="0" max="50" value="{{ cond.wave if cond.wave is not none else '' }}"></label>
-    <label>気温(℃) <input type="number" step="0.1" name="temp" value="{{ cond.temp if cond.temp is not none else '' }}"></label>
-    <input type="hidden" name="bet" value="{{ bet }}">
-    <input type="hidden" name="points" value="{{ points }}">
-    <button>この条件で予測</button>
-  </form>
-  <form method="post" action="/race/{{ prog.race_id }}/beforeinfo">
-    <button class="secondary">直前情報から自動入力</button>
-    <span class="muted">展示航走のあと（締切の15分前くらい）から取れます</span>
-  </form>
+{% set cond_q = [] %}
+{% for k in ["weather", "wind", "wave", "temp"] %}{% if cond[k] is not none %}{% set _ = cond_q.append((k, cond[k])) %}{% endif %}{% endfor %}
+<section class="race-head" data-rno="{{ prog.race_no }}R">
+  <div class="race-nav">
+    {% for s in siblings %}
+    <a href="/race/{{ s.race_id }}" class="{% if s.race_id == prog.race_id %}current{% endif %}">{{ s.race_no }}R</a>
+    {% endfor %}
+  </div>
+  <p class="eyebrow">{{ prog.date | replace("-", ".") }}</p>
+  <h1>{{ VENUES.get(prog.venue) }} {{ prog.race_no }}R
+    <small>{{ prog.race_name }}</small></h1>
+  <p class="meta">{% if prog.deadline %}締切 <b>{{ prog.deadline }}</b> ・ {% endif %}{{ prog.distance }}m</p>
+  <div class="race-type {{ race_type[2] }}">
+    <b>{{ race_type[0] }}</b><span>{{ race_type[1] }}</span>
+  </div>
 </section>
 
-<section class="card highlight">
-  <h2>おすすめ: {{ rec.title }}</h2>
-  <p>{{ rec.reason }}</p>
-  <table>
-    <tr><th>買い目</th><th>的中確率</th></tr>
-    {% for p in rec.picks %}<tr><td class="combo">{{ p.combo }}</td><td>{{ p.prob | pct }}</td></tr>{% endfor %}
-    <tr class="sum"><td>合計</td><td>{{ rec.hit_prob | pct }}</td></tr>
-  </table>
+<nav class="subtabs" role="tablist">
+  <button role="tab" data-tab="rec">⭐ おすすめ</button>
+  <button role="tab" data-tab="boats">🚤 6艇の実力</button>
+  <button role="tab" data-tab="pick">🎯 自分で選ぶ</button>
+  <button role="tab" data-tab="cond">🌤 天気と水面</button>
+</nav>
+
+{# ---------- おすすめ ---------- #}
+<section class="panel" data-panel="rec">
+  <div class="card highlight">
+    <p class="eyebrow">PICK ・ 迷ったらこれ</p>
+    <h2 class="rec-title">{{ rec.title }}</h2>
+    <p>{{ rec.reason }}</p>
+
+    <form method="get" class="budget" action="#rec">
+      {% for k, v in cond_q %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <input type="hidden" name="bet" value="{{ bet }}"><input type="hidden" name="points" value="{{ points }}">
+      <label>予算 <input type="number" name="budget" value="{{ budget }}" min="100" step="100">円</label>
+      <button class="btn small">金額を計算</button>
+    </form>
+
+    <ul class="picks">
+      {% for p in rec.picks %}
+      <li>
+        {{ boats(p.combo, rec.bet_type) }}
+        <span class="bar"><span style="width: {{ (p.prob * 100) | round(1) }}%"></span></span>
+        <span class="prob">{{ p.prob | pct }}</span>
+        <span class="amount">{{ rec_each | yen }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="summary">
+      <div><span class="muted">当たる確率</span><b>約{{ rec.hit_prob | pct0 }}</b></div>
+      <div><span class="muted">合計</span><b>{{ (rec_each * rec.picks|length) | yen }}</b></div>
+      <div><span class="muted">点数</span><b>{{ rec.picks|length }}点</b></div>
+    </div>
+    {% if past %}
+    <p class="past {% if past.roi >= 1 %}plus{% else %}minus{% endif %}">
+      📈 この買い方（{{ BET_TYPES[rec.bet_type] }}）の過去の成績: 回収率 <b>{{ past.roi | pct0 }}</b>
+      ・的中率 {{ past.hit_rate | pct0 }}（{{ past.races }}レースで検証）
+      {% if past.roi < 1 %}<br><small>100%未満は、続けると損になりやすいという意味。</small>{% endif %}
+    </p>
+    {% endif %}
+
+    <textarea id="rec-text" class="copy-src" readonly>{{ buy_text(rec.picks, rec.bet_type, rec_each) }}</textarea>
+    <div class="buy">
+      <button class="btn primary" onclick="copyText('rec-text')">📋 買い目をコピー</button>
+      <a class="btn gold" href="{{ TELEBOAT_URL }}" target="_blank" rel="noopener">🎫 テレボートで買う ↗</a>
+    </div>
+    <p class="muted small">舟券は公式のテレボートに自分でログインして買ってね。コピーした買い目を見ながら入力すると楽だよ。</p>
+  </div>
+
+  <div class="card">
+    <h2>勝ちそうな順</h2>
+    <ul class="rank">
+      {% for s in scores | sort(attribute="win_prob", reverse=True) %}
+      <li>
+        <span class="lane lane{{ s.lane }}">{{ s.lane }}</span>
+        <span class="name">{{ s.racer_name }}</span>
+        <span class="bar"><span style="width: {{ (s.win_prob * 100) | round(1) }}%"></span></span>
+        <span class="prob">1着 {{ s.win_prob | pct0 }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
 </section>
 
-<section class="card">
-  <h2>各艇の評価</h2>
-  <table class="entries">
-    <tr><th>枠</th><th>選手</th><th>級</th><th>全国勝率</th><th>モーター</th><th>1着</th><th>2連対</th><th>3連対</th><th>今回の条件での実績</th></tr>
+{# ---------- 6艇の実力 ---------- #}
+<section class="panel" data-panel="boats">
+  <p class="muted">枠の色と番号は、ボートの色と同じ。1号艇（白）はいちばん内側からスタートするので有利。</p>
+  <div class="boat-cards">
     {% for s in scores %}
     {% set e = entries[s.lane] %}
-    <tr>
-      <td><span class="lane lane{{ s.lane }}">{{ s.lane }}</span></td>
-      <td><a href="/racer/{{ s.racer_id }}">{{ s.racer_name }}</a><br><small class="muted">{{ s.racer_id }}</small></td>
-      <td>{{ s.grade }}</td>
-      <td>{{ e.nat_win_rate }}</td>
-      <td>{{ e.motor_no }}<br><small class="muted">{{ e.motor_2rate }}%</small></td>
-      <td><b>{{ s.win_prob | pct }}</b></td>
-      <td>{{ s.top2_prob | pct }}</td>
-      <td>{{ s.top3_prob | pct }}</td>
-      <td class="notes">
+    <article class="card boat b{{ s.lane }}">
+      <header>
+        <span class="lane big lane{{ s.lane }}">{{ s.lane }}</span>
+        <div>
+          <a class="name" href="/racer/{{ s.racer_id }}">{{ s.racer_name }}</a>
+          <div class="muted small">{{ e.branch }}・{{ e.age }}歳・登録{{ s.racer_id }}</div>
+        </div>
+        <span class="grade g{{ s.grade }}" title="{{ GRADE_LABEL.get(s.grade, '') }}">{{ s.grade }}<small>{{ GRADE_LABEL.get(s.grade, '') }}</small></span>
+      </header>
+      <dl class="probs">
+        <div><dt>1着になる</dt><dd><span class="bar"><span style="width: {{ (s.win_prob * 100) | round(1) }}%"></span></span>{{ s.win_prob | pct0 }}</dd></div>
+        <div><dt>2着以内</dt><dd><span class="bar"><span style="width: {{ (s.top2_prob * 100) | round(1) }}%"></span></span>{{ s.top2_prob | pct0 }}</dd></div>
+        <div><dt>3着以内</dt><dd><span class="bar"><span style="width: {{ (s.top3_prob * 100) | round(1) }}%"></span></span>{{ s.top3_prob | pct0 }}</dd></div>
+      </dl>
+      <div class="facts">
+        <span>勝率 <b>{{ e.nat_win_rate }}</b></span>
+        <span>エンジン <b>{{ e.motor_2rate }}%</b>
+          {% if e.motor_2rate >= 40 %}<em class="good">よく走る</em>{% elif e.motor_2rate and e.motor_2rate < 28 %}<em class="bad">非力</em>{% endif %}
+        </span>
+      </div>
+      <div class="notes">
         {% for n in s.notes %}
           {% if n.starts == 0 %}
-            <span class="note none">{{ n.label }} 実績なし</span>
+            <span class="note none">{{ n.label }} データなし</span>
+          {% elif n.delta > 0.05 %}
+            <span class="note good">👍 {{ n.label }}が得意（3着以内 {{ n.top3_rate | pct0 }}・{{ n.starts }}走）</span>
+          {% elif n.delta < -0.05 %}
+            <span class="note bad">👎 {{ n.label }}は苦手（3着以内 {{ n.top3_rate | pct0 }}・{{ n.starts }}走）</span>
           {% else %}
-            <span class="note {% if n.delta > 0.05 %}good{% elif n.delta < -0.05 %}bad{% endif %}">
-              {{ n.label }} 3連対 {{ n.top3_rate | pct }}（{{ n.starts }}走）
-            </span>
+            <span class="note">{{ n.label }} ふつう（3着以内 {{ n.top3_rate | pct0 }}・{{ n.starts }}走）</span>
           {% endif %}
         {% else %}
-          <span class="muted">条件を入れると表示</span>
+          <span class="muted small">「天気と水面」タブで条件を入れると、得意・苦手が出るよ</span>
         {% endfor %}
-      </td>
-    </tr>
+      </div>
+    </article>
     {% endfor %}
-  </table>
+  </div>
 </section>
 
-<section class="card">
-  <h2>買い方を選ぶ</h2>
-  <form method="get" class="row wrap">
-    {% for k in ["weather", "wind", "wave", "temp"] %}
-      {% if cond[k] is not none %}<input type="hidden" name="{{ k }}" value="{{ cond[k] }}">{% endif %}
-    {% endfor %}
-    <label>券種
-      <select name="bet">
-        {% for k, label in bet_types.items() %}
-        <option value="{{ k }}" {% if k == bet %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>点数 <input type="number" name="points" min="1" max="30" value="{{ points }}"></label>
-    <button>表示</button>
+{# ---------- 自分で選ぶ ---------- #}
+<section class="panel" data-panel="pick">
+  <form method="get" action="#pick" class="card">
+    {% for k, v in cond_q %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <h2>① 買い方（券種）を選ぶ</h2>
+    <div class="bet-options">
+      {% for k, label in BET_TYPES.items() %}
+      <label class="bet-option {% if k == bet %}selected{% endif %}">
+        <input type="radio" name="bet" value="{{ k }}" {% if k == bet %}checked{% endif %} onchange="this.form.requestSubmit()">
+        <b>{{ label }}</b>
+        <span class="stars" title="難しさ">{{ "★" * BET_GUIDE[k][1] }}{{ "☆" * (3 - BET_GUIDE[k][1]) }}</span>
+        <small>{{ BET_GUIDE[k][0] }}</small>
+      </label>
+      {% endfor %}
+    </div>
+    <h2>② 何点買う？ と予算</h2>
+    <div class="row wrap">
+      <label>点数 <input type="number" name="points" min="1" max="20" value="{{ points }}"></label>
+      <label>予算 <input type="number" name="budget" min="100" step="100" value="{{ budget }}">円</label>
+      <button class="btn">買い目を出す</button>
+    </div>
   </form>
-  <table>
-    <tr><th>買い目</th><th>的中確率</th></tr>
-    {% for p in picks %}<tr><td class="combo">{{ p.combo }}</td><td>{{ p.prob | pct }}</td></tr>{% endfor %}
-    <tr class="sum"><td>合計</td><td>{{ hit_prob | pct }}</td></tr>
-  </table>
+
+  <div class="card">
+    <h2>③ 予想の買い目（{{ BET_TYPES[bet] }}・{{ picks|length }}点）</h2>
+    <ul class="picks">
+      {% for p in picks %}
+      <li>
+        {{ boats(p.combo, bet) }}
+        <span class="bar"><span style="width: {{ (p.prob * 100) | round(1) }}%"></span></span>
+        <span class="prob">{{ p.prob | pct }}</span>
+        <span class="amount">{{ pick_each | yen }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="summary">
+      <div><span class="muted">当たる確率</span><b>約{{ hit_prob | pct0 }}</b></div>
+      <div><span class="muted">合計</span><b>{{ (pick_each * picks|length) | yen }}</b></div>
+    </div>
+    <textarea id="pick-text" class="copy-src" readonly>{{ buy_text(picks, bet, pick_each) }}</textarea>
+    <div class="buy">
+      <button class="btn primary" onclick="copyText('pick-text')">📋 買い目をコピー</button>
+      <a class="btn gold" href="{{ TELEBOAT_URL }}" target="_blank" rel="noopener">🎫 テレボートで買う ↗</a>
+    </div>
+  </div>
 </section>
+
+{# ---------- 天気と水面 ---------- #}
+<section class="panel" data-panel="cond">
+  <div class="card">
+    <h2>今日の天気と水面</h2>
+    <p class="muted">選手ごとに「雨に強い」「荒れた水面が得意」などのクセがあるよ。条件を入れると予想に反映される。</p>
+    <form method="post" action="/race/{{ prog.race_id }}/beforeinfo">
+      <button class="btn primary">📡 公式の直前情報から自動で入れる</button>
+      <span class="muted small">展示航走のあと（締切の15分前くらい）からが正確</span>
+    </form>
+    <hr>
+    <form method="get" action="#rec" class="cond-form">
+      <input type="hidden" name="bet" value="{{ bet }}"><input type="hidden" name="points" value="{{ points }}">
+      <input type="hidden" name="budget" value="{{ budget }}">
+      <fieldset>
+        <legend>天気</legend>
+        <div class="weather-options">
+          {% for w, icon in [("", "－"), ("晴", "☀️"), ("曇り", "☁️"), ("雨", "☔"), ("雪", "❄️"), ("霧", "🌫")] %}
+          <label class="{% if (cond.weather or '') == w %}selected{% endif %}">
+            <input type="radio" name="weather" value="{{ w }}" {% if (cond.weather or '') == w %}checked{% endif %}>
+            <span class="icon">{{ icon }}</span>{{ w or "指定なし" }}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="row wrap">
+        <label>風の強さ <span class="muted small">(m)</span>
+          <input type="number" name="wind" min="0" max="20" value="{{ cond.wind if cond.wind is not none else '' }}" placeholder="例: 3"></label>
+        <label>波の高さ <span class="muted small">(cm)</span>
+          <input type="number" name="wave" min="0" max="50" value="{{ cond.wave if cond.wave is not none else '' }}" placeholder="例: 2"></label>
+        <label>気温 <span class="muted small">(℃)</span>
+          <input type="number" step="0.1" name="temp" value="{{ cond.temp if cond.temp is not none else '' }}" placeholder="例: 18"></label>
+      </div>
+      <button class="btn">この条件で予想し直す</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const tabs = document.querySelectorAll('.subtabs [data-tab]');
+    const panels = document.querySelectorAll('[data-panel]');
+    function show(name) {
+      if (![...tabs].some(t => t.dataset.tab === name)) name = 'rec';
+      tabs.forEach(t => t.setAttribute('aria-selected', t.dataset.tab === name));
+      panels.forEach(p => p.hidden = p.dataset.panel !== name);
+    }
+    tabs.forEach(t => t.addEventListener('click', () => {
+      history.replaceState(null, '', '#' + t.dataset.tab); show(t.dataset.tab);
+    }));
+    show(location.hash.slice(1));
+    // 天気ボタンの見た目
+    document.querySelectorAll('.weather-options input, .bet-options input').forEach(i =>
+      i.addEventListener('change', () => {
+        i.closest('div').querySelectorAll('label').forEach(l => l.classList.toggle('selected', l.contains(i) && i.checked));
+      }));
+  })();
+</script>
 {% endblock %}

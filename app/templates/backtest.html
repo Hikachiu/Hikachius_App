@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}成績検証 | 競艇予測{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>成績検証（回収率）</h1>
+  <p class="lead">過去のレースを「このアプリの予想どおりに、1点100円で買っていたら」どうなったかの記録。</p>
+</section>
+
+<section class="card explain">
+  <h2>回収率ってなに？</h2>
+  <p><b>回収率 = 戻ってきたお金 ÷ 使ったお金</b>。100%を超えたらプラス、下回ったらマイナス。</p>
+  <p class="muted">競艇は売上の約25%が運営に引かれるので、適当に買うと回収率は平均75%くらいになる。<b>75%より上なら予想に意味がある</b>、100%を超え続けたら本物。</p>
+</section>
+
+{% if not reports %}
+<section class="card empty">
+  <p class="big">まだ検証していないよ</p>
+  <p>ターミナルでこれを実行すると、結果がここに出る:</p>
+  <pre>python -m boatrace.backtest --start 2026-10-20 --end 2026-11-11</pre>
+</section>
+{% endif %}
+
+{% for rep in reports %}
+<section class="card">
+  <h2>{{ rep.start }} 〜 {{ rep.end }} <small class="muted">{{ "{:,}".format(rep.races) }}レース</small></h2>
+  <ul class="roi-list">
+    {% for name, t in rep.strategies.items() | sort(attribute="1.roi", reverse=True) %}
+    <li class="{% if t.roi >= 1 %}plus{% elif t.roi >= 0.75 %}even{% else %}minus{% endif %}">
+      <span class="roi-name">{{ name }}</span>
+      <span class="roi-bar"><span style="width: {{ [t.roi * 50, 100] | min }}%"></span><i class="line100"></i></span>
+      <span class="roi-val">{{ t.roi | pct0 }}</span>
+      <span class="muted small">的中 {{ t.hit_rate | pct0 }}・{{ "{:,}".format(t.invested) }}円 → {{ "{:,}".format(t.returned) }}円</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="muted small">棒の真ん中の線が100%（トントン）。【比較】は予想を使わない買い方。</p>
+
+  <details>
+    <summary>おすすめの内訳と、確率の当たり具合を見る</summary>
+    <h3>おすすめが選んだ券種ごと</h3>
+    <table>
+      <tr><th>券種</th><th>レース</th><th>的中率</th><th>回収率</th></tr>
+      {% for name, t in rep.rec_by_type.items() %}
+      <tr><td>{{ name }}</td><td>{{ t.races }}</td><td>{{ t.hit_rate | pct }}</td><td>{{ t.roi | pct }}</td></tr>
+      {% endfor %}
+    </table>
+    <h3>本命の単勝を、予想の自信度ごと</h3>
+    <table>
+      <tr><th>予想1着率</th><th>レース</th><th>的中率</th><th>回収率</th></tr>
+      {% for name, t in rep.win_by_conf.items() | sort %}
+      <tr><td>{{ name }}</td><td>{{ t.races }}</td><td>{{ t.hit_rate | pct }}</td><td>{{ t.roi | pct }}</td></tr>
+      {% endfor %}
+    </table>
+    <h3>確率の当たり具合</h3>
+    <p class="muted small">「予想で30%」と言った艇が、実際に30%くらい勝っていれば正確。</p>
+    <table>
+      <tr><th>予想1着率</th><th>艇数</th><th>予想の平均</th><th>実際に1着</th></tr>
+      {% for k, v in rep.calib.items() | sort(attribute="0") %}
+      <tr><td>{{ k }}</td><td>{{ v[0] }}</td><td>{{ (v[1] / v[0]) | pct }}</td><td>{{ (v[2] / v[0]) | pct }}</td></tr>
+      {% endfor %}
+    </table>
+  </details>
+</section>
+{% endfor %}
+{% endblock %}

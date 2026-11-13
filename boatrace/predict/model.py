@@ -18,7 +18,7 @@ SHRINK_COND = 15      # 条件別実績を平均に寄せる強さ
 COND_WEIGHT = 0.6     # 条件補正の効き具合
 WIN_RATE_WEIGHT = 0.25
 MOTOR_WEIGHT = 1.5
-BETA = 1.4            # スコア差を確率差に変換する強さ
+BETA = 1.1            # スコア差を確率差に変換する強さ（2026/11/5-11 の 984 レースで対数尤度最大）
 
 
 def _logit(p: float) -> float:

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}データとスマホ | 競艇予測{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">SETTINGS</p>
+  <h1>データとスマホ</h1>
+  <p class="lead">自動取り込みの状況と、スマホから開くためのQRコード。</p>
+</section>
+
+<div class="grid">
+  <section class="card">
+    <h2>📱 スマホで開く</h2>
+    {% if phone_url %}
+      <div class="qr">{{ qr_svg | safe }}</div>
+      <p class="center"><code class="url">{{ phone_url }}</code></p>
+      {% if not listening_all %}
+      <p class="notice-inline">⚠ 今はこのPCからしか開けない起動のしかたになっているよ。<b>start_server.bat</b> で起動し直すと、同じWi-Fiのスマホから開けるようになる。</p>
+      {% endif %}
+      <ol class="steps small">
+        <li>スマホをPCと<b>同じWi-Fi</b>につなぐ</li>
+        <li>カメラでQRコードを読む</li>
+        <li>開いたらブラウザの「ホーム画面に追加」で、アプリみたいに使える</li>
+      </ol>
+      <p class="muted small">初めて start_server.bat を動かしたとき、Windowsが「アクセスを許可しますか」と聞いてくる。<b>プライベートネットワーク</b>にだけチェックして許可してね。</p>
+    {% else %}
+      <p>ネットワークにつながっていないみたい。</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>🔄 自動取り込み</h2>
+    <p>{% if auto %}<span class="pill on">ON</span> サーバーが動いている間、1時間ごとに新しいデータを読み込むよ。{% else %}<span class="pill off">OFF</span> 自動取り込みは止まっています。{% endif %}</p>
+    <ul class="small muted">
+      <li>出走表: 今日の分。17時をすぎたら明日の分も</li>
+      <li>結果: 昨日までの分（23時をすぎたら今日の分も）</li>
+      <li>気温: 直近3日のレース</li>
+    </ul>
+    <dl class="kv">
+      <div><dt>過去の結果</dt><dd>{{ "{:,}".format(counts.races) }}レース</dd></div>
+      <div><dt>期間</dt><dd>{{ counts.mn }} 〜 {{ counts.mx }}</dd></div>
+      <div><dt>気温あり</dt><dd>{{ "{:,}".format(counts.temps) }}レース</dd></div>
+      <div><dt>出走表</dt><dd>{{ counts.prog }} まで</dd></div>
+    </dl>
+    <form method="post" action="/sync" onsubmit="this.querySelector('button').textContent='更新中…（数分かかることも）'; this.querySelector('button').disabled=true">
+      <button class="btn primary">今すぐ更新</button>
+    </form>
+    <h3>最近の更新</h3>
+    {% if logs %}
+    <ul class="log">
+      {% for l in logs %}
+      <li class="{{ 'ok' if l.ok else 'ng' }}"><time>{{ l.started[5:16] | replace("T", " ") }}</time> {{ l.message }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">まだ更新していないよ</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

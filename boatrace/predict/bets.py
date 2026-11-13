@@ -14,6 +14,18 @@ BET_TYPES = {
 }
 
 
+# 初心者向けの説明: (どう当てるか, 難しさ 1-3)
+BET_GUIDE = {
+    "win": ("1着になる艇を1つ当てる", 1),
+    "place": ("2着までに入る艇を1つ当てる。いちばん当たりやすい", 1),
+    "exacta": ("1着と2着を、順番どおりに当てる", 2),
+    "quinella": ("1着と2着の2艇を当てる。順番は関係なし", 2),
+    "wide": ("3着までに入る2艇を当てる。順番は関係なし", 1),
+    "trifecta": ("1着・2着・3着を順番どおりに当てる。いちばん難しいけど配当も大きい", 3),
+    "trio": ("3着までの3艇を当てる。順番は関係なし", 2),
+}
+
+
 def finish_order_probs(scores: dict[int, float], beta: float) -> dict[tuple[int, int, int], float]:
     """Plackett-Luce: 強さ w の艇から順に 1 着・2 着・3 着が決まるとみなした確率。"""
     w = {lane: math.exp(beta * s) for lane, s in scores.items()}
@@ -59,6 +71,33 @@ def combo_probs(order_probs: dict[tuple[int, int, int], float], bet_type: str) -
     return acc
 
 
+def _hits(order: tuple[int, int, int], bet_type: str, combo: str) -> bool:
+    a, b, c = order
+    lanes = [int(x) for x in combo.split("-")]
+    if bet_type == "win":
+        return lanes[0] == a
+    if bet_type == "place":
+        return lanes[0] in (a, b)
+    if bet_type == "exacta":
+        return lanes == [a, b]
+    if bet_type == "quinella":
+        return set(lanes) == {a, b}
+    if bet_type == "wide":
+        return set(lanes) <= {a, b, c}
+    if bet_type == "trifecta":
+        return lanes == [a, b, c]
+    if bet_type == "trio":
+        return set(lanes) == {a, b, c}
+    raise ValueError(bet_type)
+
+
+def hit_probability(order_probs, bet_type: str, combos: list[str]) -> float:
+    """買い目のうち「どれか1つでも当たる」確率。
+    拡連複・複勝は1レースで複数当たりうるので、単純に足すと100%を超える。"""
+    return sum(p for o, p in order_probs.items()
+               if any(_hits(o, bet_type, c) for c in combos))
+
+
 @dataclass
 class Pick:
     combo: str
@@ -86,14 +125,17 @@ class Recommendation:
     title: str
     reason: str
     picks: list[Pick]
-
-    @property
-    def hit_prob(self) -> float:
-        return sum(p.prob for p in self.picks)
+    hit_prob: float = 0.0
 
 
 def recommend(order_probs, win_probs: dict[int, float]) -> Recommendation:
     """レースの「堅さ」を見て、券種と買い方を 1 つおすすめする。"""
+    rec = _choose(order_probs, win_probs)
+    rec.hit_prob = hit_probability(order_probs, rec.bet_type, [p.combo for p in rec.picks])
+    return rec
+
+
+def _choose(order_probs, win_probs: dict[int, float]) -> Recommendation:
     ranked = sorted(win_probs.items(), key=lambda x: x[1], reverse=True)
     (top, p1), (second, p2) = ranked[0], ranked[1]
 

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}選手をしらべる | 競艇予測{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>選手をしらべる</h1>
+  <p class="lead">名前（一部でもOK）か登録番号で探せるよ。天気や水面ごとの得意・苦手がわかる。</p>
+  <form method="get" class="date-form">
+    <input type="search" name="q" value="{{ q }}" placeholder="例: 山田 / 4444" aria-label="選手名または登録番号" autofocus>
+    <button class="btn primary">さがす</button>
+  </form>
+</section>
+
+{% if q %}
+<section class="card">
+  {% if found %}
+  <h2>{{ found|length }}人みつかったよ</h2>
+  <ul class="racer-list">
+    {% for r in found %}
+    <li><a href="/racer/{{ r.racer_id }}">
+      <b>{{ r.racer_name }}</b> <span class="muted small">{{ r.racer_id }}</span>
+      <span class="muted small">{{ r.starts }}走・1着 {{ r.wins or 0 }}回・3着以内 {{ ((r.top3 or 0) / r.starts) | pct0 }}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>「{{ q }}」に当てはまる選手は見つからなかったよ。</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
