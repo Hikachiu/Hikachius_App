@@ -2,7 +2,8 @@
 {% block content %}
 <section class="hero">
   <h1>{% if d == today %}今日のレース{% else %}{{ d }} のレース{% endif %}</h1>
-  <p class="lead">見たいレースをタップすると、AIの予想とおすすめの買い方が出るよ。</p>
+  <p class="lead">見たいレースをタップすると、AIの予想とおすすめの買い方が出るよ。
+    <a href="/guide">🔰 はじめての方へ</a></p>
   <form method="get" action="/" class="date-form">
     <input type="date" name="d" value="{{ d }}" aria-label="開催日">
     <button class="btn">この日を見る</button>

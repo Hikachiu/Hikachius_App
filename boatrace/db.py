@@ -109,6 +109,31 @@ CREATE TABLE IF NOT EXISTS paper_checks (
     note           TEXT
 );
 
+-- レース直後に公式サイトの結果ページから取った結果（払戻は payouts に入れる）
+CREATE TABLE IF NOT EXISTS quick_results (
+    race_id  TEXT PRIMARY KEY,
+    refunds  TEXT,                    -- 返還になった艇（"5,6"）。無ければ空
+    fetched  TEXT NOT NULL
+);
+
+-- 仮想舟券（お金を使わずにアプリ内で買う）
+CREATE TABLE IF NOT EXISTS vbets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_id    TEXT NOT NULL,
+    bet_type   TEXT NOT NULL,         -- win / place / exacta / quinella / wide / trifecta / trio
+    combo      TEXT NOT NULL,         -- 順番が関係ない券種は小さい順
+    amount     INTEGER NOT NULL,      -- 100 円単位
+    source     TEXT,                  -- rec（おすすめ）/ pick（自分で選ぶ）/ value（期待値）/ manual（手入力）
+    placed_at  TEXT NOT NULL
+);
+
+-- 仮想のお財布（1 行だけ）
+CREATE TABLE IF NOT EXISTS vwallet (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    start_balance INTEGER NOT NULL,
+    started_at    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     started  TEXT,

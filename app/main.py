@@ -8,7 +8,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -27,6 +27,7 @@ from boatrace.data import odds as odds_api
 from boatrace.paper import PaperTrader, settled_bets, summarize
 from boatrace.predict import value
 from boatrace.sync import AutoSync, last_sync, sync_once
+from boatrace import wallet
 
 HERE = Path(__file__).parent
 BACKTEST_DIR = DATA_DIR / "backtest"
@@ -217,9 +218,13 @@ def race(request: Request, race_id: str, wind: str | None = None, wave: str | No
         except Exception as e:  # noqa: BLE001
             value_error = f"オッズを取れなかった: {e}"
     paper_here = [r for r in settled_bets(conn) if r["race_id"] == race_id]
+    vbets_here = wallet.settled_vbets(conn, race_id)
 
     return _render(
         request, "race.html", "race",
+        vbets_here=vbets_here, wallet_balance=wallet.balance(conn)["available"],
+        closed=wallet.deadline_passed(prog, datetime.now()),
+        bought=request.query_params.get("bought"), bet_error=request.query_params.get("err"),
         value_rows=value_rows, value_error=value_error, value_at=value_at,
         paper_here=paper_here, strategies=value.STRATEGY_BY_KEY,
         prog=prog, scores=scores, entries={e["lane"]: e for e in entries}, cond=cond,
@@ -286,6 +291,54 @@ def backtest(request: Request):
 @app.get("/guide", response_class=HTMLResponse)
 def guide(request: Request):
     return _render(request, "guide.html", "guide")
+
+
+# ---- 仮想舟券 ----------------------------------------------------------------
+
+@app.post("/vbet")
+def place_vbet(race_id: str = Form(...), bet_type: str = Form(...), combos: str = Form(...),
+               amount: int = Form(...), source: str = Form("manual"), back: str = Form("")):
+    """combos はカンマ区切り（"1-2-3,1-3-2"）。"""
+    conn = connect()
+    if not back.startswith("/") or back.startswith("//"):   # 外部へ飛ばさない
+        back = f"/race/{race_id}"
+    parts = urlsplit(back)
+    # 前回の結果表示（bought / err）は消してから付け直す
+    query = [(k, v) for k, v in parse_qsl(parts.query) if k not in ("bought", "err")]
+    try:
+        n = wallet.place_bets(conn, race_id, bet_type, [c for c in combos.split(",") if c.strip()],
+                              amount, source)
+        query.append(("bought", f"{BET_TYPES[bet_type]} {n}点・{n * amount:,}円"))
+    except wallet.BetError as e:
+        query.append(("err", str(e)))
+    url = urlunsplit(("", "", parts.path, urlencode(query), parts.fragment))
+    return RedirectResponse(url, status_code=303)
+
+
+@app.get("/wallet", response_class=HTMLResponse)
+def wallet_page(request: Request):
+    conn = connect()
+    rows = wallet.settled_vbets(conn)
+    w = wallet.ensure_wallet(conn)
+    # レースごとにまとめる
+    races: dict[str, dict] = {}
+    for r in rows:
+        g = races.setdefault(r["race_id"], {"race_id": r["race_id"], "date": r["date"], "venue": r["venue"],
+                                             "race_no": r["race_no"], "deadline": r["deadline"], "bets": [],
+                                             "amount": 0, "returned": 0, "pending": False})
+        g["bets"].append(r)
+        g["amount"] += r["amount"]
+        g["returned"] += r["returned"]
+        g["pending"] |= r["status"] == "pending"
+    return _render(request, "wallet.html", "wallet", stats=wallet.stats(conn, rows),
+                   balance=wallet.balance(conn)["available"], races=list(races.values()),
+                   started_at=w["started_at"], start_balance=wallet.START_BALANCE)
+
+
+@app.post("/wallet/reset")
+def wallet_reset():
+    wallet.reset_wallet(connect())
+    return RedirectResponse("/wallet", status_code=303)
 
 
 # ---- データ更新 / スマホで開く -------------------------------------------------

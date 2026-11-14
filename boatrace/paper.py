@@ -122,9 +122,14 @@ class PaperTrader:
         self._stop.set()
 
     def _run(self) -> None:
+        from . import quick
         while not self._stop.is_set():
             try:
                 run_once()
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+            try:   # 終わったレースを、その日のうちに精算（仮想舟券・ペーパートレード）
+                quick.settle(connect())
             except Exception:  # noqa: BLE001
                 traceback.print_exc()
             self._stop.wait(self.interval)
@@ -159,12 +164,14 @@ def settled_bets(conn: sqlite3.Connection, limit: int | None = None) -> list[dic
     """paper_bets に結果を突き合わせる。status: pending / hit / miss / refund"""
     sql = """
         SELECT b.*, p.date, p.venue, p.race_no, p.deadline,
-               (SELECT 1 FROM races ra WHERE ra.race_id = b.race_id) AS has_result,
+               (SELECT 1 FROM races ra WHERE ra.race_id = b.race_id) AS has_k,
+               q.refunds AS quick_refunds,
                r.finish_raw,
                pay.payout,
                o.odds AS closing_odds
         FROM paper_bets b
         JOIN programs p ON p.race_id = b.race_id
+        LEFT JOIN quick_results q ON q.race_id = b.race_id
         LEFT JOIN results r ON r.race_id = b.race_id AND r.lane = CAST(b.combo AS INTEGER)
         LEFT JOIN payouts pay ON pay.race_id = b.race_id AND pay.bet_type = b.bet_type AND pay.combo = b.combo
         LEFT JOIN odds o ON o.race_id = b.race_id AND o.bet_type = b.bet_type AND o.combo = b.combo
@@ -174,9 +181,10 @@ def settled_bets(conn: sqlite3.Connection, limit: int | None = None) -> list[dic
     out = []
     for row in conn.execute(sql):
         d = dict(row)
-        if not d["has_result"]:
+        quick_refunds = set((d["quick_refunds"] or "").split(",")) - {""}
+        if not (d["has_k"] or d["quick_refunds"] is not None):
             d["status"], d["returned"] = "pending", None
-        elif d["finish_raw"] and d["finish_raw"].startswith(REFUND_MARKS):
+        elif (d["finish_raw"] and d["finish_raw"].startswith(REFUND_MARKS)) or d["combo"] in quick_refunds:
             d["status"], d["returned"] = "refund", d["stake"]
         elif d["payout"]:
             d["status"], d["returned"] = "hit", d["payout"] * d["stake"] // 100

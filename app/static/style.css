@@ -380,6 +380,31 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 700; margi
 .s-hit { color: var(--good); } .s-miss { color: var(--muted); } .s-refund { color: var(--warn); } .s-pending { color: var(--accent); }
 .section-title { margin: 22px 0 10px; font-size: 1rem; color: var(--muted); }
 
+/* ---- 仮想舟券 ---- */
+.vbuy { display: contents; }
+.vbtn { border: 0; color: #fff; background: linear-gradient(135deg, #8b5cf6, #c084fc);
+        box-shadow: 0 6px 20px rgba(139, 92, 246, .35); }
+.vbtn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .5; }
+.card.flash { padding: 12px 16px; }
+.card.flash.ok { background: rgba(139, 92, 246, .14); border-color: rgba(192, 132, 252, .5); }
+.card.flash.ng { background: var(--bad-bg); border-color: rgba(255, 107, 122, .4); color: var(--bad); }
+.manual-bet { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.manual-bet .grow { flex: 1; min-width: 200px; }
+.manual-bet .grow input { width: 100%; }
+.manual-bet label:has(input[type=number]) { flex-direction: row; align-items: center; gap: 6px; }
+.wallet-hero .balance { display: flex; flex-direction: column; align-items: flex-start; }
+.wallet-hero .balance b { font-family: var(--num); font-size: 3rem; line-height: 1.1; color: var(--gold);
+                          text-shadow: 0 0 20px rgba(255, 212, 0, .35); }
+.summary b small { font-size: .9rem; color: var(--muted); }
+.summary b.plus, .race-result.plus { color: var(--good); }
+.summary b.minus, .race-result.minus { color: var(--bad); }
+.ticket-race header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ticket-race header a { color: var(--text); text-decoration: none; }
+.race-result { margin-left: auto; font-family: var(--num); font-size: 1.15rem; }
+.race-result.pending { color: var(--accent); font-family: inherit; font-size: .85rem; font-weight: 700; }
+footer a { color: var(--accent); }
+
 /* トースト */
 .toast { position: fixed; left: 50%; bottom: 96px; transform: translate(-50%, 20px); opacity: 0; z-index: 40;
          background: linear-gradient(135deg, var(--accent), #8ff0ff); color: #04121a; padding: 10px 20px; border-radius: 99px;
