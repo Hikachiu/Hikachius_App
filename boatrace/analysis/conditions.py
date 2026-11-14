@@ -113,9 +113,11 @@ def racer_profile(conn: sqlite3.Connection, racer_id: str, before_date: str | No
 _lane_prior_cache: dict[tuple, float] = {}
 
 
-def lane_prior(conn: sqlite3.Connection, venue: str | None, lane: int) -> float:
-    """その場・その枠の平均 3 連対率。データが少なければ全国の値、それも無ければ目安値。"""
-    key = (venue, lane)
+def lane_prior(conn: sqlite3.Connection, venue: str | None, lane: int,
+               before_date: str | None = None) -> float:
+    """その場・その枠の平均 3 連対率。データが少なければ全国の値、それも無ければ目安値。
+    before_date を渡すと、その日より前のレースだけで計算する（検証で未来の情報を混ぜないため）。"""
+    key = (venue, lane, before_date)
     if key in _lane_prior_cache:
         return _lane_prior_cache[key]
     fallback = {1: 0.75, 2: 0.55, 3: 0.50, 4: 0.45, 5: 0.35, 6: 0.25}[lane]
@@ -127,6 +129,9 @@ def lane_prior(conn: sqlite3.Connection, venue: str | None, lane: int) -> float:
         if v:
             sql += " AND ra.venue = ?"
             params.append(v)
+        if before_date:
+            sql += " AND ra.date < ?"
+            params.append(before_date)
         row = conn.execute(sql, params).fetchone()
         if row["n"] and row["n"] >= 300:
             value = row["t"] / row["n"]

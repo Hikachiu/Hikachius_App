@@ -12,6 +12,69 @@
   <p class="muted">競艇は売上の約25%が運営に引かれるので、適当に買うと回収率は平均75%くらいになる。<b>75%より上なら予想に意味がある</b>、100%を超え続けたら本物。</p>
 </section>
 
+{# ---------- 本番テスト ---------- #}
+<section class="card highlight">
+  <p class="eyebrow">LIVE ・ 本番テスト</p>
+  <h2>📝 ペーパートレード</h2>
+  <p class="muted small">締切の約3分前に、その時点のオッズで期待値の高い買い目を自動で「買ったことにする」記録（お金は使っていない）。結果は翌日の更新で入る。
+    {% if paper_checks.n %}{{ paper_checks.first[:10] }} から {{ "{:,}".format(paper_checks.n) }} レースを判断。{% endif %}</p>
+  {% set total = paper["合計"] %}
+  {% if total.bets %}
+  <ul class="roi-list">
+    {% for s in strategies %}{% set t = paper[s.key] %}
+    <li class="{% if t.settled == 0 %}{% elif t.roi >= 1 %}plus{% elif t.roi >= 0.75 %}even{% else %}minus{% endif %}">
+      <span class="roi-name">戦略{{ s.key }} <small class="muted">{{ s.label }}</small></span>
+      <span class="roi-bar"><span style="width: {{ [t.roi * 50, 100] | min }}%"></span><i class="line100"></i></span>
+      <span class="roi-val">{% if t.settled %}{{ t.roi | pct0 }}{% else %}－{% endif %}</span>
+      <span class="muted small">{{ t.bets }}点（結果待ち {{ t.bets - t.settled }}）・的中 {{ t.hit_rate | pct0 }}・収支 {{ "{:+,}".format(t.profit) }}円</span>
+    </li>
+    {% endfor %}
+    <li class="{% if total.settled == 0 %}{% elif total.roi >= 1 %}plus{% elif total.roi >= 0.75 %}even{% else %}minus{% endif %}">
+      <span class="roi-name">合計</span>
+      <span class="roi-bar"><span style="width: {{ [total.roi * 50, 100] | min }}%"></span><i class="line100"></i></span>
+      <span class="roi-val">{% if total.settled %}{{ total.roi | pct0 }}{% else %}－{% endif %}</span>
+      <span class="muted small">{{ total.bets }}点・{{ "{:,}".format(total.invested) }}円 → {{ "{:,}".format(total.returned) }}円</span>
+    </li>
+  </ul>
+  <p class="muted small">数百点たまるまでは、数字のブレが大きいので一喜一憂しないでね。</p>
+
+  <details>
+    <summary>最近の記録を見る</summary>
+    <table>
+      <tr><th>レース</th><th>買い目</th><th>判断時→締切時オッズ</th><th>期待値</th><th>結果</th></tr>
+      {% for r in paper_rows %}
+      <tr>
+        <td><a href="/race/{{ r.race_id }}#value">{{ r.date[5:] }} {{ VENUES.get(r.venue) }}{{ r.race_no }}R</a></td>
+        <td>{{ BET_TYPES[r.bet_type] }} <span class="lane lane{{ r.combo }}">{{ r.combo }}</span> <small class="muted">{{ r.strategy }}</small></td>
+        <td>{{ r.odds }} → {{ r.closing_odds if r.closing_odds is not none else "?" }}</td>
+        <td>{{ "%.2f" | format(r.ev) }}</td>
+        <td class="status s-{{ r.status }}">{{ {"pending": "結果待ち", "hit": "的中 " ~ r.returned ~ "円", "miss": "はずれ", "refund": "返還"}[r.status] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </details>
+  {% else %}
+  <p class="big">まだ記録はないよ</p>
+  <p class="muted small">サーバーが動いていれば、締切の約3分前に自動で判断を始める。</p>
+  {% endif %}
+</section>
+
+{% if ev %}
+<section class="card">
+  <h2>💰 期待値で買う検証（過去のオッズ）</h2>
+  <p class="muted small">ルールを決めた期間 {{ ev.fit | replace(":", " 〜 ") }} ／ 確かめた期間 {{ ev.test | replace(":", " 〜 ") }}。締切時オッズでの計算なので、本番は少し悪くなる可能性がある。</p>
+  <table>
+    <tr><th>買い方</th><th>確かめた期間の点数</th><th>回収率</th><th>95%の範囲</th></tr>
+    {% for t in ev.top[:5] %}
+    <tr><td>{{ t.rule }}</td><td>{{ t.test_bets }}</td><td><b>{{ t.test_roi | pct0 }}</b></td>
+        <td class="muted">{{ t.test_ci[0] | pct0 }} 〜 {{ t.test_ci[1] | pct0 }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endif %}
+
+<h2 class="section-title">予想どおりに買った場合（オッズを見ない買い方）</h2>
+
 {% if not reports %}
 <section class="card empty">
   <p class="big">まだ検証していないよ</p>

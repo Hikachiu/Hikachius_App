@@ -370,6 +370,16 @@ details summary { cursor: pointer; color: var(--accent); font-weight: 700; margi
 .log li.ng::before { background: var(--bad); }
 .log time { font-family: var(--num); color: var(--muted); margin-right: 8px; }
 
+/* ---- 期待値・ペーパートレード ---- */
+.tagbet { font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: rgba(255, 255, 255, .08); white-space: nowrap; }
+.ev { font-family: var(--num); font-size: 1.05rem; margin-left: auto; }
+.ev.good { color: var(--good); text-shadow: 0 0 10px rgba(46, 230, 160, .4); }
+.tags i { font-style: normal; font-family: var(--num); font-size: .78rem; padding: 1px 7px; border-radius: 6px;
+          margin-left: 3px; background: rgba(255, 212, 0, .15); color: var(--gold); border: 1px solid rgba(255, 212, 0, .4); }
+.status { font-size: .82rem; font-weight: 700; white-space: nowrap; margin-left: auto; }
+.s-hit { color: var(--good); } .s-miss { color: var(--muted); } .s-refund { color: var(--warn); } .s-pending { color: var(--accent); }
+.section-title { margin: 22px 0 10px; font-size: 1rem; color: var(--muted); }
+
 /* トースト */
 .toast { position: fixed; left: 50%; bottom: 96px; transform: translate(-50%, 20px); opacity: 0; z-index: 40;
          background: linear-gradient(135deg, var(--accent), #8ff0ff); color: #04121a; padding: 10px 20px; border-radius: 99px;

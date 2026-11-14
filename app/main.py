@@ -23,6 +23,9 @@ from boatrace.ingest import ingest_program_day
 from boatrace.predict.bets import (BET_GUIDE, BET_TYPES, finish_order_probs, hit_probability,
                                    recommend, top_picks)
 from boatrace.predict.model import BETA, score_entries
+from boatrace.data import odds as odds_api
+from boatrace.paper import PaperTrader, settled_bets, summarize
+from boatrace.predict import value
 from boatrace.sync import AutoSync, last_sync, sync_once
 
 HERE = Path(__file__).parent
@@ -34,13 +37,16 @@ GRADE_LABEL = {"A1": "トップ級", "A2": "上位", "B1": "中堅", "B2": "新�
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    auto = None
+    workers = []
     if os.environ.get("BOATRACE_AUTO_SYNC", "1") != "0":
-        auto = AutoSync()
-        auto.start()
+        workers.append(AutoSync())
+    if os.environ.get("BOATRACE_PAPER", "1") != "0":
+        workers.append(PaperTrader())
+    for w in workers:
+        w.start()
     yield
-    if auto:
-        auto.stop()
+    for w in workers:
+        w.stop()
 
 
 app = FastAPI(title="競艇予測", lifespan=lifespan)
@@ -79,9 +85,18 @@ def _to_float(v):
 def load_backtests() -> list[dict]:
     if not BACKTEST_DIR.exists():
         return []
-    reps = [json.loads(p.read_text(encoding="utf-8")) for p in BACKTEST_DIR.glob("*.json")]
+    # backtest.py の結果だけ（YYYY-MM-DD_YYYY-MM-DD.json）。preds_* / ev_* は別の形式
+    reps = [json.loads(p.read_text(encoding="utf-8"))
+            for p in BACKTEST_DIR.glob("????-??-??_????-??-??.json")]
     # レース数の多い（＝信頼できる）検証を先に
     return sorted(reps, key=lambda r: r["races"], reverse=True)
+
+
+def load_ev_report() -> dict | None:
+    """backtest_ev.py の最新の結果。"""
+    files = sorted(BACKTEST_DIR.glob("ev_*.json"), key=lambda p: p.stat().st_mtime, reverse=True) \
+        if BACKTEST_DIR.exists() else []
+    return json.loads(files[0].read_text(encoding="utf-8")) if files else None
 
 
 # ---- 今日のレース ------------------------------------------------------------
@@ -145,7 +160,8 @@ def _race_type(p1: float, p2: float) -> tuple[str, str, str]:
 
 @app.get("/race/{race_id}", response_class=HTMLResponse)
 def race(request: Request, race_id: str, wind: str | None = None, wave: str | None = None,
-         temp: str | None = None, bet: str = "trifecta", points: int = 6, budget: int = 1000):
+         temp: str | None = None, bet: str = "trifecta", points: int = 6, budget: int = 1000,
+         check_value: int = 0):
     conn = connect()
     prog = conn.execute("SELECT * FROM programs WHERE race_id = ?", (race_id,)).fetchone()
     if prog is None:
@@ -185,8 +201,27 @@ def race(request: Request, race_id: str, wind: str | None = None, wave: str | No
         if t and t["races"]:
             past = {"roi": t["roi"], "hit_rate": t["hit_rate"], "races": t["races"]}
 
+    # 期待値チェック: 今のオッズ（締切後なら締切時オッズ）を取って、単勝・複勝の期待値を出す
+    value_rows, value_error, value_at = None, None, None
+    if check_value:
+        try:
+            od: value.Odds = {}
+            for o in odds_api.fetch_win_place(date.fromisoformat(prog["date"]), prog["venue"], prog["race_no"]):
+                od.setdefault(o["bet_type"], {})[o["combo"]] = [o["odds"], o["odds_high"]]
+            if od.get("win"):
+                value_rows = value.evaluate_all({str(s.lane): s.win_prob for s in scores},
+                                                {str(s.lane): s.top2_prob for s in scores}, od)
+                value_at = datetime.now().strftime("%H:%M:%S")
+            else:
+                value_error = "オッズがまだ出ていないみたい。発売が始まってからもう一度押してね。"
+        except Exception as e:  # noqa: BLE001
+            value_error = f"オッズを取れなかった: {e}"
+    paper_here = [r for r in settled_bets(conn) if r["race_id"] == race_id]
+
     return _render(
         request, "race.html", "race",
+        value_rows=value_rows, value_error=value_error, value_at=value_at,
+        paper_here=paper_here, strategies=value.STRATEGY_BY_KEY,
         prog=prog, scores=scores, entries={e["lane"]: e for e in entries}, cond=cond,
         rec=rec, rec_each=per_ticket(len(rec.picks)), race_type=race_type, past=past,
         bet=bet, points=points, budget=budget, picks=picks, pick_each=per_ticket(len(picks)),
@@ -240,7 +275,12 @@ def racer(request: Request, racer_id: str):
 
 @app.get("/backtest", response_class=HTMLResponse)
 def backtest(request: Request):
-    return _render(request, "backtest.html", "backtest", reports=load_backtests())
+    conn = connect()
+    rows = settled_bets(conn)
+    checks = conn.execute("SELECT COUNT(*) n, MIN(checked_at) first FROM paper_checks").fetchone()
+    return _render(request, "backtest.html", "backtest", reports=load_backtests(),
+                   ev=load_ev_report(), paper=summarize(rows), paper_rows=rows[:60],
+                   paper_checks=checks, strategies=value.STRATEGIES)
 
 
 @app.get("/guide", response_class=HTMLResponse)

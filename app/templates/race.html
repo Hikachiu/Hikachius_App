@@ -40,7 +40,85 @@
   <button role="tab" data-tab="boats">🚤 6艇の実力</button>
   <button role="tab" data-tab="pick">🎯 自分で選ぶ</button>
   <button role="tab" data-tab="cond">🌤 天気と水面</button>
+  <button role="tab" data-tab="value">💰 期待値</button>
 </nav>
+
+{# ---------- 期待値 ---------- #}
+<section class="panel" data-panel="value">
+  <div class="card highlight">
+    <p class="eyebrow">VALUE ・ お宝の買い目</p>
+    <h2>オッズのわりに来そうな艇</h2>
+    <p class="muted">期待値 = 当たる確率 × オッズ。<b>1.0を超えると、同じ買い方を続けたときにプラスになりうる</b>買い目。確率は「自分の予想」と「オッズに出ているみんなの予想」を混ぜて出しているよ。</p>
+    <form method="get" action="#value">
+      {% for k, v in cond_q %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <input type="hidden" name="check_value" value="1">
+      <button class="btn primary">📈 今のオッズで期待値を見る</button>
+      <span class="muted small">締切の直前ほど、オッズが確定に近くて正確</span>
+    </form>
+
+    {% if value_error %}<p class="notice-inline">{{ value_error }}</p>{% endif %}
+    {% if value_rows %}
+      <p class="muted small">{{ value_at }} 時点のオッズ</p>
+      {% set buys = value_rows | selectattr("strategies") | list %}
+      {% if buys %}
+        <h3>💰 戦略に当てはまる買い目</h3>
+        <ul class="picks">
+          {% for r in buys | sort(attribute="ev", reverse=True) %}
+          <li>
+            <span class="tagbet">{{ BET_TYPES[r.bet_type] }}</span>
+            <span class="lane lane{{ r.combo }}">{{ r.combo }}</span>
+            <span class="muted small">{{ r.prob | pct0 }} × {{ r.odds }}倍</span>
+            <span class="ev good">期待値 {{ "%.2f" | format(r.ev) }}</span>
+            <span class="tags">{% for k in r.strategies %}<i>{{ k }}</i>{% endfor %}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="big">今のオッズだと、戦略に当てはまる買い目は無いよ</p>
+        <p class="muted small">「見送る」のも立派な作戦。期待値の低いレースを買わないことが、回収率を上げるコツ。</p>
+      {% endif %}
+
+      <details>
+        <summary>全部の艇の期待値を見る</summary>
+        <table>
+          <tr><th>券種</th><th>艇</th><th>確率</th><th>オッズ</th><th>期待値</th></tr>
+          {% for r in value_rows %}
+          <tr>
+            <td>{{ BET_TYPES[r.bet_type] }}</td>
+            <td><span class="lane lane{{ r.combo }}">{{ r.combo }}</span></td>
+            <td>{{ r.prob | pct }}</td>
+            <td>{{ r.odds }}{% if r.odds_high %}〜{{ r.odds_high }}{% endif %}</td>
+            <td class="{{ 'ev good' if r.ev >= 1 else 'muted' }}">{{ "%.2f" | format(r.ev) }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        <p class="muted small">複勝は払戻に幅があるので、低いほうのオッズで計算している（控えめ）。</p>
+      </details>
+    {% endif %}
+
+    <h3>戦略</h3>
+    <ul class="small muted">
+      {% for s in strategies.values() %}<li><b>{{ s.key }}</b>: {{ s.label }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  {% if paper_here %}
+  <div class="card">
+    <h2>📝 ペーパートレードの記録</h2>
+    <p class="muted small">締切前に自動で「買ったことにした」買い目（お金は使っていない）</p>
+    <ul class="picks">
+      {% for r in paper_here %}
+      <li>
+        <span class="tagbet">{{ BET_TYPES[r.bet_type] }}</span>
+        <span class="lane lane{{ r.combo }}">{{ r.combo }}</span>
+        <span class="muted small">{{ r.odds }}倍・期待値{{ "%.2f" | format(r.ev) }}・戦略{{ r.strategy }}</span>
+        <span class="status s-{{ r.status }}">{{ {"pending": "結果待ち", "hit": "的中 " ~ r.returned ~ "円", "miss": "はずれ", "refund": "返還"}[r.status] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>
 
 {# ---------- おすすめ ---------- #}
 <section class="panel" data-panel="rec">

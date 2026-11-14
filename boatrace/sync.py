@@ -15,11 +15,12 @@ import traceback
 from datetime import date, datetime, timedelta
 
 from .db import connect
-from .ingest import ingest_program_day, ingest_results_day, ingest_temps
+from .ingest import ingest_odds, ingest_program_day, ingest_results_day, ingest_temps
 
 INTERVAL_SEC = 60 * 60          # 1 時間ごと
 MAX_BACKFILL_DAYS = 30          # DB が空のときに遡る日数
 TEMPS_PER_RUN = 150             # 1 時間ごとに回るので、1 回あたりは控えめに
+ODDS_PER_RUN = 200
 
 _lock = threading.Lock()        # 手動更新と定期更新が重ならないように
 
@@ -66,6 +67,12 @@ def _sync(now: datetime, log) -> str:
             if n:
                 msgs.append(f"結果 {d:%m/%d} {n}R")
             d += timedelta(days=1)
+
+        # 締切時オッズ（昨日以前の未取得分）。ペーパートレードの「判断時 vs 締切時」の比較と、
+        # 検証データを毎日増やすため
+        n = ingest_odds(conn, today - timedelta(days=3), today - timedelta(days=1), limit=ODDS_PER_RUN)
+        if n:
+            msgs.append(f"締切時オッズ {n}R")
 
         # 気温（直近 3 日分の空き）
         temp_start = today - timedelta(days=3)

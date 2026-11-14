@@ -3,12 +3,14 @@
   python -m boatrace.ingest history --start 2025-11-01 --end 2026-11-12
   python -m boatrace.ingest program --date 2026-11-14
   python -m boatrace.ingest temps --start 2026-10-01 --end 2026-11-12 [--venue 24]
+  python -m boatrace.ingest odds --start 2026-10-20 --end 2026-11-04 [--venue 24]
 """
 import argparse
 import sqlite3
-from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 
-from .data import download, parse_program, parse_results, weather
+from .data import download, odds, parse_program, parse_results, weather
 from .db import connect
 
 
@@ -90,6 +92,45 @@ def ingest_temps(conn: sqlite3.Connection, start: date, end: date, venue: str | 
     return done
 
 
+def ingest_odds(conn: sqlite3.Connection, start: date, end: date, venue: str | None = None,
+                limit: int | None = None) -> int:
+    """出走表のあるレースのうち、単勝・複勝オッズが未取得のものを取る（1件1秒）。
+    終わったレースなら締切時オッズになる。"""
+    sql = """SELECT p.race_id, p.date, p.venue, p.race_no FROM programs p
+             WHERE p.date BETWEEN ? AND ?
+               AND NOT EXISTS (SELECT 1 FROM odds o WHERE o.race_id = p.race_id AND o.bet_type = 'win')"""
+    params: list = [start.isoformat(), end.isoformat()]
+    if venue:
+        sql += " AND p.venue = ?"
+        params.append(venue)
+    sql += " ORDER BY p.date, p.venue, p.race_no"
+    if limit:
+        sql += f" LIMIT {int(limit)}"
+    rows = conn.execute(sql, params).fetchall()
+
+    def fetch(r):
+        try:
+            return odds.fetch_win_place(date.fromisoformat(r["date"]), r["venue"], r["race_no"])
+        except Exception as e:  # noqa: BLE001
+            print(f"  {r['race_id']}: 取得失敗 {e}", flush=True)
+            return None
+
+    done = 0
+    # 公式サイトへのアクセス間隔は http 側で全体 1 秒に 1 回に保ったまま、
+    # 応答待ちを重ねるために 3 スレッドで取る（DB への書き込みはこのスレッドだけ）
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        results = ex.map(fetch, rows)
+        for i, (r, got) in enumerate(zip(rows, results), 1):
+            if got:
+                now = datetime.now().isoformat(timespec="seconds")
+                _upsert(conn, "odds", [{"race_id": r["race_id"], **g, "fetched": now} for g in got])
+                conn.commit()
+                done += 1
+            if i % 100 == 0:
+                print(f"  オッズ {i}/{len(rows)} 件", flush=True)
+    return done
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="競艇データの取り込み")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -102,6 +143,10 @@ def main() -> None:
     t.add_argument("--start", required=True)
     t.add_argument("--end", required=True)
     t.add_argument("--venue")
+    o = sub.add_parser("odds", help="単勝・複勝オッズを公式サイトから取る（1件1秒）")
+    o.add_argument("--start", required=True)
+    o.add_argument("--end", required=True)
+    o.add_argument("--venue")
     a = p.parse_args()
 
     conn = connect()
@@ -115,6 +160,9 @@ def main() -> None:
     elif a.cmd == "temps":
         n = ingest_temps(conn, date.fromisoformat(a.start), date.fromisoformat(a.end), a.venue)
         print(f"気温を {n} レース分取得しました")
+    elif a.cmd == "odds":
+        n = ingest_odds(conn, date.fromisoformat(a.start), date.fromisoformat(a.end), a.venue)
+        print(f"オッズを {n} レース分取得しました")
 
 
 if __name__ == "__main__":

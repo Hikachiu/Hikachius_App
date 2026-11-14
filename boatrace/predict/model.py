@@ -55,7 +55,7 @@ def score_entries(conn: sqlite3.Connection, venue: str, entries: list[dict],
     for e in entries:
         lane = e["lane"]
         prof = racer_profile(conn, e["racer_id"], before_date)
-        prior = lane_prior(conn, venue, lane)
+        prior = lane_prior(conn, venue, lane, before_date)
 
         lane_t = prof.by_lane.get(lane)
         lane_n = lane_t.starts if lane_t else 0

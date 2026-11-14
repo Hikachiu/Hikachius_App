@@ -74,6 +74,41 @@ CREATE TABLE IF NOT EXISTS program_entries (
     PRIMARY KEY (race_id, lane)
 );
 
+CREATE TABLE IF NOT EXISTS odds (
+    race_id   TEXT NOT NULL,
+    bet_type  TEXT NOT NULL,         -- win / place（ほかの券種はあとで追加）
+    combo     TEXT NOT NULL,         -- 1 / 1-2 / 1-2-3
+    odds      REAL NOT NULL,         -- 倍率（複勝は下限）
+    odds_high REAL,                  -- 複勝・拡連複の上限
+    fetched   TEXT NOT NULL,         -- 取得日時。締切後なら締切時オッズ
+    PRIMARY KEY (race_id, bet_type, combo)
+);
+
+-- ペーパートレード: 締切前に「買ったことにした」買い目（お金は使わない）
+CREATE TABLE IF NOT EXISTS paper_bets (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_id        TEXT NOT NULL,
+    strategy       TEXT NOT NULL,     -- A / B / C（predict/value.py）
+    bet_type       TEXT NOT NULL,     -- win / place
+    combo          TEXT NOT NULL,
+    prob           REAL NOT NULL,     -- 判断したときの確率
+    odds           REAL NOT NULL,     -- 判断したときのオッズ（複勝は下限）
+    ev             REAL NOT NULL,
+    stake          INTEGER NOT NULL DEFAULT 100,
+    decided_at     TEXT NOT NULL,
+    UNIQUE (race_id, strategy, combo)
+);
+
+-- ペーパートレードで判断したレース（買い目が無くても記録して、二度判断しない）
+CREATE TABLE IF NOT EXISTS paper_checks (
+    race_id        TEXT PRIMARY KEY,
+    checked_at     TEXT NOT NULL,
+    minutes_before REAL,              -- 締切の何分前に判断したか
+    cond           TEXT,              -- 使った天候などの条件（JSON）
+    picks          INTEGER NOT NULL,
+    note           TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     started  TEXT,
